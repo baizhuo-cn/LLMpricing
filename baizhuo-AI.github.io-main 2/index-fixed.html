@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模型价格看板 - H5</title>
+  <meta name="description" content="AI 模型价格看板（上传Excel，支持收藏/常用/单位币种切换/厂商筛选/中英切换/评论/导出CSV）" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .two-lines { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    #boot-msg { color:#64748b; font-size:14px; text-align:center; padding:24px; }
+    #err { white-space: pre-wrap; color:#b91c1c; background:#fff7ed; border:1px solid #fecaca; border-radius:12px; padding:12px; margin:12px auto; max-width: 960px; display:none; }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root">
+    <div id="boot-msg">正在加载资源……如长时间无响应，请检查网络是否能访问 <code>unpkg.com</code> 与 <code>cdn.tailwindcss.com</code>。</div>
+    <div id="err"></div>
+  </div>
+
+  <!-- React UMD（生产版） -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone（开启 JSX 预设） -->
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <!-- XLSX 解析 -->
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+  <script>
+    // 基础错误展示（避免空白页）
+    window.addEventListener('error', function (e) {
+      var box = document.getElementById('err');
+      if (box) {
+        box.style.display = 'block';
+        box.textContent = (e.error && e.error.stack) ? e.error.stack : (e.message || e.toString());
+      }
+    });
+  </script>
+
+  <!-- 业务代码（使用 JSX，必须指定 data-presets="react"） -->
+  <script type="text/babel" data-presets="react">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    const I18N = {
+      zh: { title:"模型价格看板", upload:"上传Excel（.xlsx/.xls）", or:"或", loadDemo:"载入示例数据",
+        view:"视图", view_all:"全部", view_fav:"收藏", view_common:"常用",
+        unit:"单位", per1k:"每千 tokens", per1m:"每百万 tokens",
+        srcCurrency:"数据源币种", displayCurrency:"显示币种", fxRate:"汇率(1 USD → CNY)",
+        provider:"厂商筛选", language:"界面语言", search:"搜索模型/说明",
+        table_provider:"厂商", table_name:"模型名称", table_rule:"计费规则",
+        table_miaodong_in:"秒懂输入", table_miaodong_out:"秒懂输出",
+        table_official_in:"官方输入", table_official_out:"官方输出",
+        table_ops:"操作", fav:"收藏", unfav:"取消收藏", comment:"评论",
+        noData:"请先上传 Excel 或加载示例数据", avgRating:"平均评分",
+        addComment:"新增评论", nickname:"昵称(可选)", rating:"评分(1-5)",
+        content:"评论内容", submit:"提交", cancel:"取消", exportCsv:"导出当前视图为 CSV",
+        priceNote:"注：若规则非按 tokens 计费，将以原表单价展示。", none:"—", close:"关闭" },
+      en: { title:"Model Pricing Dashboard", upload:"Upload Excel (.xlsx/.xls)", or:"or", loadDemo:"Load Demo",
+        view:"View", view_all:"All", view_fav:"Favorites", view_common:"Common",
+        unit:"Unit", per1k:"Per 1K tokens", per1m:"Per 1M tokens",
+        srcCurrency:"Source Currency", displayCurrency:"Display Currency", fxRate:"FX (1 USD → CNY)",
+        provider:"Provider Filter", language:"Language", search:"Search name/notes",
+        table_provider:"Provider", table_name:"Model Name", table_rule:"Billing Rule",
+        table_miaodong_in:"Miaodong In", table_miaodong_out:"Miaodong Out",
+        table_official_in:"Official In", table_official_out:"Official Out",
+        table_ops:"Actions", fav:"Star", unfav:"Unstar", comment:"Comments",
+        noData:"Please upload Excel or load demo data.", avgRating:"Avg Rating",
+        addComment:"Add Comment", nickname:"Nickname (optional)", rating:"Rating (1-5)",
+        content:"Comment", submit:"Submit", cancel:"Cancel", exportCsv:"Export CSV (current view)",
+        priceNote:"Note: If non-token billing, raw price is shown.", none:"—", close:"Close" }
+    };
+    const LS_FAV_KEY="model-favorites-v1", LS_COMMENTS_KEY="model-comments-v1";
+    const isTruthy=v=>v===true?true:(typeof v==="number"?v!==0:(typeof v==="string"?["是","yes","y","true","1"].includes(v.trim().toLowerCase()):false));
+    const parseNumber=v=>v==null?null:(typeof v==="number"? (isFinite(v)?v:null) : (typeof v==="string"? (n=>isFinite(n)?n:null)(parseFloat(v.replace(/[,\s]/g,"").replace(/[￥¥$]/g,"").replace(/cny|rmb|usd/gi,""))) : null));
+    const isTokenBasedRule=rule=>{ if(!rule) return true; const s=String(rule).toLowerCase(); return /token|1k|千|百万|1m/.test(s); };
+    const convertUnit=(v,to)=> v==null?null:(to==="per1k"?v:v*1000);
+    const convertCurrency=(v,src,display,fx)=>{ if(v==null)return null; if(src===display)return v; if(src==="USD"&&display==="CNY")return v*fx; if(src==="CNY"&&display==="USD")return v/fx; return v; };
+    const formatMoney=(n,cur)=> n==null||isNaN(Number(n))? "-" : (cur==="CNY"?"¥":"$") + Number(n).toLocaleString(undefined,{maximumFractionDigits:6});
+    const modelKey=r=>`${r.厂商 ?? ""}__${r.模型名称 ?? ""}`;
+    const exportCsv=(rows,headers)=>{ const csv=[headers.join(",")].concat(rows.map(r=>headers.map(h=>{const v=r[h]; const s=(v==null)? "": String(v); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; }).join(","))).join("\n");
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`model_pricing_${Date.now()}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); };
+
+    const loadAllComments=()=>{ try{return JSON.parse(localStorage.getItem(LS_COMMENTS_KEY)||"{}");}catch{return{};} };
+    const saveAllComments=m=>localStorage.setItem(LS_COMMENTS_KEY, JSON.stringify(m));
+
+    function CommentList({ row, db, lang }) {
+      const list = db[modelKey(row)] || [];
+      if (!list.length) return <div className="text-xs text-gray-400">{lang==="zh"?"暂无评论":"No comments yet"}</div>;
+      return (
+        <div className="max-h-48 overflow-auto border rounded-xl p-2">
+          {list.sort((a,b)=>b.ts-a.ts).map(c=>(
+            <div key={c.id} className="text-sm py-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{c.author || (lang==="zh"?"匿名":"Anonymous")}</span>
+                <span className="text-yellow-600">{"★".repeat(Math.max(1, Math.min(5, c.rating || 1)))}</span>
+                <span className="text-gray-400 text-xs">{new Date(c.ts).toLocaleString()}</span>
+              </div>
+              <div className="text-gray-700 whitespace-pre-wrap">{c.text}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function App() {
+      const [lang,setLang]=useState("zh"); const T=I18N[lang];
+      const [view,setView]=useState("all"); const [unit,setUnit]=useState("per1k");
+      const [srcCurrency,setSrcCurrency]=useState("CNY"); const [displayCurrency,setDisplayCurrency]=useState("CNY"); const [fx,setFx]=useState(7.2);
+      const [providerFilter,setProviderFilter]=useState(""); const [search,setSearch]=useState("");
+      const [rows,setRows]=useState([]); const [providers,setProviders]=useState([]);
+      const [favorites,setFavorites]=useState(()=>{ try{return JSON.parse(localStorage.getItem(LS_FAV_KEY)||"{}");}catch{return{};}});
+      useEffect(()=>{ localStorage.setItem(LS_FAV_KEY, JSON.stringify(favorites)); },[favorites]);
+
+      const onUploadChange=e=>{
+        const f=e.target.files?.[0]; if(!f) return;
+        const reader=new FileReader();
+        reader.onload=evt=>{
+          const data=new Uint8Array(evt.target.result);
+          const wb=XLSX.read(data,{type:"array"});
+          const sheet=wb.Sheets[wb.SheetNames[0]];
+          const json=XLSX.utils.sheet_to_json(sheet,{defval:null});
+          setRows(json);
+          const ps=Array.from(new Set(json.map(r=>(r.厂商||"").toString().trim()).filter(Boolean)));
+          setProviders(ps);
+          document.getElementById('boot-msg')?.remove();
+        };
+        reader.readAsArrayBuffer(f);
+      };
+      const loadDemo=()=>{
+        const demo=[
+          { 厂商:"OpenAI", 模型名称:"gpt-4o-mini", 秒懂输入价格:2.0, 秒懂输出价格:8.0, 官方输入价格:3.0, 官方输出价格:12.0, 计费规则:"按1k tokens", 模型说明:"轻量多模态", 模型地区:"us-east", 是否常用模型:"是", 是否收藏:"否" },
+          { 厂商:"Anthropic", 模型名称:"Claude 3.5 Sonnet", 秒懂输入价格:5.0, 秒懂输出价格:15.0, 官方输入价格:5.0, 官方输出价格:15.0, 计费规则:"按1k tokens", 模型说明:"高性能通用", 模型地区:"us-west", 是否常用模型:"是", 是否收藏:"是" },
+        ];
+        setRows(demo); setProviders(Array.from(new Set(demo.map(r=>r.厂商))));
+        document.getElementById('boot-msg')?.remove();
+      };
+
+      const [commentFor,setCommentFor]=useState(null);
+      const [nickname,setNickname]=useState(""); const [rating,setRating]=useState(5); const [commentText,setCommentText]=useState("");
+      const [commentDb,setCommentDb]=useState(()=>loadAllComments());
+      const openComment=r=>{ setCommentFor(r); setRating(5); setCommentText(""); };
+      const submitComment=()=>{ if(!commentFor||!commentText.trim())return;
+        const key=modelKey(commentFor); const all={...commentDb}; const list=all[key]?[...all[key]]:[];
+        list.push({ id:`${Date.now()}`, author:nickname.trim()||undefined, rating:Number(rating)||5, text:commentText.trim(), ts:Date.now() });
+        all[key]=list; setCommentDb(all); saveAllComments(all); setCommentFor(null);
+      };
+      const getAvgRating=r=>{ const list=commentDb[modelKey(r)]||[]; if(!list.length)return null; const s=list.reduce((a,b)=>a+(b.rating||0),0); return s/list.length; };
+
+      const displayRows=useMemo(()=>{
+        const mapped=rows.map(r=>{
+          const tokenBased=isTokenBasedRule(r.计费规则||undefined);
+          const mdIn=parseNumber(r.秒懂输入价格), mdOut=parseNumber(r.秒懂输出价格),
+                ofIn=parseNumber(r.官方输入价格), ofOut=parseNumber(r.官方输出价格);
+          const _mdIn=tokenBased?convertUnit(mdIn,unit):mdIn;
+          const _mdOut=tokenBased?convertUnit(mdOut,unit):mdOut;
+          const _ofIn=tokenBased?convertUnit(ofIn,unit):ofIn;
+          const _ofOut=tokenBased?convertUnit(ofOut,unit):ofOut;
+          const mdInDisp=convertCurrency(_mdIn,srcCurrency,displayCurrency,fx);
+          const mdOutDisp=convertCurrency(_mdOut,srcCurrency,displayCurrency,fx);
+          const ofInDisp=convertCurrency(_ofIn,srcCurrency,displayCurrency,fx);
+          const ofOutDisp=convertCurrency(_ofOut,srcCurrency,displayCurrency,fx);
+          const avgR=getAvgRating(r);
+          return {
+            厂商:(r.厂商||"").toString(),
+            模型名称:(r.模型名称||"").toString(),
+            计费规则:r.计费规则||"",
+            秒懂输入价格:formatMoney(mdInDisp,displayCurrency),
+            秒懂输出价格:formatMoney(mdOutDisp,displayCurrency),
+            官方输入价格:formatMoney(ofInDisp,displayCurrency),
+            官方输出价格:formatMoney(ofOutDisp,displayCurrency),
+            平均评分:(avgR===null?"-":avgR.toFixed(2)),
+            _raw:r,
+          };
+        });
+        let filtered = mapped.filter(d=>{
+          if (view==="fav") return (favorites[modelKey(d._raw)] || isTruthy(d._raw.是否收藏));
+          if (view==="common") return isTruthy(d._raw.是否常用模型);
+          return true;
+        });
+        if (providerFilter) filtered = filtered.filter(d=>d.厂商===providerFilter);
+        if (search.trim()) {
+          const kw=search.trim().toLowerCase();
+          filtered = filtered.filter(d=>{
+            const n1=d.模型名称.toLowerCase(), n2=(d._raw.模型说明||"").toLowerCase();
+            return n1.includes(kw) || n2.includes(kw);
+          });
+        }
+        filtered.sort((a,b)=>{
+          const num = s => { const x = (s||"").toString().replace(/[¥$]/g,""); const n = parseFloat(x); return isFinite(n)?n:null; };
+          const aNum=num(a.官方输入价格), bNum=num(b.官方输入价格);
+          const _a=aNum==null?Infinity:aNum, _b=bNum==null?Infinity:bNum;
+          return _a-_b;
+        });
+        return filtered;
+      }, [rows, unit, srcCurrency, displayCurrency, fx, view, providerFilter, search, favorites, commentDb]);
+
+      const headers = [I18N[lang].table_provider,I18N[lang].table_name,I18N[lang].table_rule,I18N[lang].table_miaodong_in,I18N[lang].table_miaodong_out,I18N[lang].table_official_in,I18N[lang].table_official_out,I18N[lang].avgRating];
+
+      return (
+        <div className="min-h-screen">
+          <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200">
+            <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <h1 className="text-xl md:text-2xl font-semibold">{T.title}</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="file" accept=".xlsx,.xls" onChange={onUploadChange}
+                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-gray-900 file:text-white hover:file:bg-gray-800 file:cursor-pointer"
+                  aria-label={T.upload} title={T.upload}/>
+                <span className="text-gray-400 text-sm select-none">{T.or}</span>
+                <button onClick={loadDemo} className="px-3 py-2 rounded-xl text-sm bg-gray-100 hover:bg-gray-200 border border-gray-200">{T.loadDemo}</button>
+                <button onClick={()=>exportCsv(displayRows, headers)}
+                  className="px-3 py-2 rounded-xl text-sm bg-white hover:bg-gray-50 border border-gray-200">{T.exportCsv}</button>
+              </div>
+            </div>
+          </header>
+
+          <section className="max-w-6xl mx-auto px-4 py-4 grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-3 bg-white rounded-2xl shadow-sm border p-3">
+              <div className="text-sm text-gray-500 mb-2">{T.view}</div>
+              <div className="flex gap-2">
+                <button onClick={()=>setView("all")} className={`px-3 py-2 rounded-xl text-sm border ${view==="all"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>{T.view_all}</button>
+                <button onClick={()=>setView("fav")} className={`px-3 py-2 rounded-xl text-sm border ${view==="fav"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>{T.view_fav}</button>
+                <button onClick={()=>setView("common")} className={`px-3 py-2 rounded-xl text-sm border ${view==="common"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>{T.view_common}</button>
+              </div>
+            </div>
+
+            <div className="md:col-span-4 bg-white rounded-2xl shadow-sm border p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-sm text-gray-500 mb-2">{T.unit}</div>
+                  <div className="flex gap-2">
+                    <button onClick={()=>setUnit("per1k")} className={`px-3 py-2 rounded-xl text-sm border ${unit==="per1k"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>{T.per1k}</button>
+                    <button onClick={()=>setUnit("per1m")} className={`px-3 py-2 rounded-xl text-sm border ${unit==="per1m"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>{T.per1m}</button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500 mb-2">{T.language}</div>
+                  <div className="flex gap-2">
+                    <button onClick={()=>setLang("zh")} className={`px-3 py-2 rounded-xl text-sm border ${lang==="zh"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>中文</button>
+                    <button onClick={()=>setLang("en")} className={`px-3 py-2 rounded-xl text-sm border ${lang==="en"?"bg-gray-900 text-white":"bg-white hover:bg-gray-50"}`}>EN</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-5 bg-white rounded-2xl shadow-sm border p-3">
+              <div className="grid md:grid-cols-3 grid-cols-1 gap-3">
+                <div>
+                  <div className="text-sm text-gray-500 mb-1">{T.srcCurrency}</div>
+                  <select value={srcCurrency} onChange={e=>setSrcCurrency(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                    <option value="CNY">CNY</option><option value="USD">USD</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500 mb-1">{T.displayCurrency}</div>
+                  <select value={displayCurrency} onChange={e=>setDisplayCurrency(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                    <option value="CNY">CNY</option><option value="USD">USD</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500 mb-1">{T.fxRate}</div>
+                  <input type="number" step="0.0001" value={fx} onChange={e=>setFx(Number(e.target.value))} className="w-full border rounded-xl px-3 py-2"/>
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-3 bg-white rounded-2xl shadow-sm border p-3">
+              <div className="text-sm text-gray-500 mb-2">{T.provider}</div>
+              <select value={providerFilter} onChange={e=>setProviderFilter(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                <option value="">{I18N[lang].none}</option>
+                {/* 动态厂商列表 */}
+                {providers.map(p=> <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-9 bg-white rounded-2xl shadow-sm border p-3">
+              <div className="text-sm text-gray-500 mb-2">{T.search}</div>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="gpt / sonnet / llama…" className="w-full border rounded-xl px-3 py-2" />
+            </div>
+          </section>
+
+          <main className="max-w-6xl mx-auto px-4 pb-12">
+            <p className="text-xs text-gray-500 mb-2">{T.priceNote}</p>
+            <div className="overflow-auto rounded-2xl border bg-white shadow-sm">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3 w-28">{T.table_provider}</th>
+                    <th className="text-left px-4 py-3 w-56">{T.table_name}</th>
+                    <th className="text-left px-4 py-3 w-40">{T.table_rule}</th>
+                    <th className="text-left px-4 py-3">{T.table_miaodong_in}</th>
+                    <th className="text-left px-4 py-3">{T.table_miaodong_out}</th>
+                    <th className="text-left px-4 py-3">{T.table_official_in}</th>
+                    <th className="text-left px-4 py-3">{T.table_official_out}</th>
+                    <th className="text-left px-4 py-3 w-24">{T.avgRating}</th>
+                    <th className="text-left px-4 py-3 w-36">{I18N[lang].table_ops}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* 内容渲染 */}
+                  {displayRows.length===0 ? (
+                    <tr><td colSpan="9" className="text-center text-gray-400 py-12">{T.noData}</td></tr>
+                  ) : displayRows.map(r=>{
+                    const key=modelKey(r._raw);
+                    const isFav=(favorites[key] || isTruthy(r._raw.是否收藏));
+                    return (
+                      <tr key={key} className="border-t hover:bg-gray-50">
+                        <td className="px-4 py-3 align-top">{r.厂商}</td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium">{r.模型名称}</div>
+                          {r._raw.模型说明 ? (<div className="text-gray-500 text-xs mt-1 two-lines">{r._raw.模型说明}</div>) : null}
+                          {r._raw.模型地区 ? (<div className="text-gray-400 text-xs mt-1">{r._raw.模型地区}</div>) : null}
+                        </td>
+                        <td className="px-4 py-3 align-top">{r.计费规则 || "-"}</td>
+                        <td className="px-4 py-3 align-top">{r.秒懂输入价格}</td>
+                        <td className="px-4 py-3 align-top">{r.秒懂输出价格}</td>
+                        <td className="px-4 py-3 align-top">{r.官方输入价格}</td>
+                        <td className="px-4 py-3 align-top">{r.官方输出价格}</td>
+                        <td className="px-4 py-3 align-top">{r.平均评分}</td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex gap-2">
+                            <button onClick={()=>setFavorites(m=>({...m,[key]:!isFav}))}
+                              className={`px-2 py-1 rounded-lg border text-xs ${isFav?"bg-yellow-100 border-yellow-300":"bg-white hover:bg-gray-50"}`}
+                              title={isFav ? T.unfav : T.fav}>
+                              {isFav ? "★" : "☆"} {isFav ? T.unfav : T.fav}
+                            </button>
+                            <button onClick={()=>openComment(r._raw)}
+                              className="px-2 py-1 rounded-lg border text-xs bg-white hover:bg-gray-50">💬 {T.comment}</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </main>
+
+          {/* 评论弹窗 */}
+          {commentFor && (
+            <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 px-4" onClick={()=>setCommentFor(null)}>
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg" onClick={e=>e.stopPropagation()}>
+                <div className="p-4 border-b flex items-center justify-between">
+                  <div className="text-base font-semibold">{T.addComment} · {commentFor.厂商} / {commentFor.模型名称}</div>
+                  <button className="text-gray-500 hover:text-gray-700" onClick={()=>setCommentFor(null)}>{T.close}</button>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">{T.nickname}</div>
+                    <input value={nickname} onChange={e=>setNickname(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">{T.rating}</div>
+                    <input type="number" min="1" max="5" value={rating} onChange={e=>setRating(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">{T.content}</div>
+                    <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} className="w-full border rounded-xl px-3 py-2 min-h-[120px]" />
+                  </div>
+                  <CommentList row={commentFor} db={commentDb} lang={lang} />
+                </div>
+                <div className="p-4 border-t flex justify-end gap-2">
+                  <button onClick={()=>setCommentFor(null)} className="px-3 py-2 rounded-xl text-sm bg-white hover:bg-gray-50 border">{T.cancel}</button>
+                  <button onClick={submitComment} className="px-3 py-2 rounded-xl text-sm bg-gray-900 text-white hover:bg-gray-800">{T.submit}</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
