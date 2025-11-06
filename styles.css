@@ -203,18 +203,15 @@ a {
   border-radius: 1rem;
   border: 1px solid var(--border);
   overflow-x: auto;
-  width: min(100%, 1200px);
-  min-width: min(100%, 640px);
-  margin: 0 auto;
+  max-width: 100%;
 }
 
 #pricing-table {
-  --column-count: 13;
-  width: min(100%, 1200px);
-  min-width: min(100%, 720px);
+  width: 100%;
+  min-width: 720px;
+  max-width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  margin: 0 auto;
 }
 
 #pricing-table th,
@@ -223,16 +220,8 @@ a {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  width: clamp(120px, 12vw, 200px);
   max-width: 200px;
-}
-
-#pricing-table th,
-#pricing-table tbody td {
-  inline-size: min(200px, calc(100% / var(--column-count)));
-}
-
-#pricing-table tbody td:not(.desc-cell),
-#pricing-table thead th {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -258,38 +247,15 @@ a {
   font-size: 0.75rem;
 }
 
-.desc-cell {
+.desc {
   max-width: 200px;
-}
-
-.desc-cell .desc {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-  max-width: 200px;
-  width: 100%;
-  color: var(--text-muted);
-}
-
-.desc-cell .desc-content {
-  display: -webkit-box;
-  width: 100%;
   white-space: normal;
   line-height: 1.5;
+  color: var(--text-muted);
   word-wrap: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
-  overflow: hidden;
   text-overflow: ellipsis;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-}
-
-.desc-cell .desc.is-expanded .desc-content {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
 }
 
 .desc button {
