@@ -203,11 +203,15 @@ a {
   border-radius: 1rem;
   border: 1px solid var(--border);
   overflow-x: auto;
+  max-width: 100%;
 }
 
 #pricing-table {
   width: 100%;
+  min-width: 720px;
+  max-width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 #pricing-table th,
@@ -216,6 +220,11 @@ a {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  width: clamp(120px, 12vw, 200px);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #pricing-table tbody tr:hover {
@@ -239,10 +248,14 @@ a {
 }
 
 .desc {
-  max-width: 320px;
+  max-width: 200px;
   white-space: normal;
   line-height: 1.5;
   color: var(--text-muted);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  text-overflow: ellipsis;
 }
 
 .desc button {
