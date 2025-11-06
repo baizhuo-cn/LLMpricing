@@ -665,12 +665,14 @@ function renderTable(items) {
     tr.appendChild(regionTd);
 
     const descTd = document.createElement('td');
+    descTd.classList.add('desc-cell');
     const desc = document.createElement('div');
     desc.className = 'desc';
     const full = item.desc || '';
     if (full.length > 140) {
       const short = full.slice(0, 140) + '…';
       const span = document.createElement('span');
+      span.className = 'desc-content';
       span.textContent = short;
       const toggle = document.createElement('button');
       toggle.textContent = dict['table.desc.more'];
@@ -679,12 +681,16 @@ function renderTable(items) {
         toggle.dataset.expanded = expanded ? '0' : '1';
         span.textContent = expanded ? short : full;
         toggle.textContent = expanded ? dict['table.desc.more'] : dict['table.desc.less'];
+        desc.classList.toggle('is-expanded', !expanded);
       });
       desc.appendChild(span);
-      desc.appendChild(document.createElement('br'));
       desc.appendChild(toggle);
     } else {
-      desc.textContent = full || '—';
+      const span = document.createElement('span');
+      span.className = 'desc-content';
+      span.textContent = full || '—';
+      desc.classList.add('is-expanded');
+      desc.appendChild(span);
     }
     descTd.appendChild(desc);
     tr.appendChild(descTd);
