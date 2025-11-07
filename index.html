@@ -19,11 +19,11 @@
         <a id="nav-ratings" href="#/ratings" class="nav-link"></a>
       </nav>
       <div class="toolbar" role="toolbar" aria-label="Controls">
-        <label class="input-group">
+        <label class="input-group" data-scope="pricing-only">
           <span class="sr-only">Search</span>
           <input type="search" id="search-input" aria-label="Search" placeholder="" />
         </label>
-        <div class="dropdown" id="vendor-filter">
+        <div class="dropdown" id="vendor-filter" data-scope="pricing-only">
           <button id="vendor-filter-btn" class="btn" aria-haspopup="true" aria-expanded="false"></button>
           <div class="dropdown-panel" role="menu" aria-hidden="true">
             <div class="dropdown-header">
@@ -37,16 +37,32 @@
             <div class="dropdown-body" id="vendor-options" role="group"></div>
           </div>
         </div>
-        <button id="favorites-toggle" class="btn toggle" aria-pressed="false"></button>
-        <button id="common-toggle" class="btn toggle" aria-pressed="false"></button>
+        <button id="favorites-toggle" class="btn toggle" aria-pressed="false" data-scope="pricing-only"></button>
+        <button id="common-toggle" class="btn toggle" aria-pressed="false" data-scope="pricing-only"></button>
         <div class="segmented">
           <button id="currency-toggle" class="btn"></button>
           <button id="unit-toggle" class="btn"></button>
         </div>
         <button id="lang-toggle" class="btn"></button>
-        <button id="import-btn" class="btn secondary"></button>
-        <button id="settings-btn" class="btn secondary" aria-haspopup="dialog"></button>
-        <button id="reset-btn" class="btn secondary"></button>
+        <div class="sort-controls" data-scope="pricing-only">
+          <label>
+            <span id="sort-field-label"></span>
+            <select id="sort-field">
+              <option value="input" id="sort-field-input"></option>
+              <option value="output" id="sort-field-output"></option>
+            </select>
+          </label>
+          <label>
+            <span id="sort-direction-label"></span>
+            <select id="sort-direction">
+              <option value="asc" id="sort-direction-asc"></option>
+              <option value="desc" id="sort-direction-desc"></option>
+            </select>
+          </label>
+        </div>
+        <button id="import-btn" class="btn secondary" data-scope="pricing-only"></button>
+        <button id="settings-btn" class="btn secondary" aria-haspopup="dialog" data-scope="pricing-only"></button>
+        <button id="reset-btn" class="btn secondary" data-scope="pricing-only"></button>
       </div>
     </header>
 
@@ -284,7 +300,7 @@
         </label>
         <div class="comment-actions">
           <button type="submit" class="btn primary" id="comment-submit"></button>
-          <button type="button" class="btn secondary" id="comment-export"></button>
+          <button type="button" class="btn secondary" id="comment-export" data-scope="pricing-only"></button>
         </div>
       </form>
     </div>
