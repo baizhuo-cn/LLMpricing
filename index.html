@@ -13,6 +13,10 @@
       <div class="branding">
         <h1 id="app-title">LLM Pricing Dashboard</h1>
       </div>
+      <nav class="main-nav" aria-label="Primary navigation">
+        <a id="nav-dashboard" href="#/" class="nav-link"></a>
+        <a id="nav-calc" href="#/calc" class="nav-link"></a>
+      </nav>
       <div class="toolbar" role="toolbar" aria-label="Controls">
         <label class="input-group">
           <span class="sr-only">Search</span>
@@ -46,42 +50,170 @@
     </header>
 
     <main>
-      <section id="guide" class="guide" role="region" aria-live="polite">
-        <div class="guide-content">
-          <p id="guide-text"></p>
-          <button id="guide-dismiss" class="btn primary"></button>
+      <section id="page-dashboard" class="page" data-route="#/">
+        <section id="guide" class="guide" role="region" aria-live="polite">
+          <div class="guide-content">
+            <p id="guide-text"></p>
+            <button id="guide-dismiss" class="btn primary"></button>
+          </div>
+        </section>
+
+        <section class="table-section" aria-live="polite">
+          <div class="table-wrapper" role="region" aria-label="Pricing table">
+            <table id="pricing-table">
+              <thead>
+                <tr>
+                  <th data-sort="favorite" aria-sort="none">⭐</th>
+                  <th data-sort="vendor" aria-sort="none"></th>
+                  <th data-sort="model" aria-sort="none"></th>
+                  <th data-sort="input" aria-sort="none"></th>
+                  <th data-sort="output" aria-sort="none"></th>
+                  <th data-sort="currency" aria-sort="none"></th>
+                  <th data-sort="unit" aria-sort="none"></th>
+                  <th></th>
+                  <th data-sort="tempDefault" aria-sort="none"></th>
+                  <th data-sort="region" aria-sort="none"></th>
+                  <th></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+            <div id="empty-state" class="empty-state" hidden></div>
+          </div>
+          <nav class="pagination" aria-label="Pagination">
+            <button id="prev-page" class="btn" aria-label="Previous page"></button>
+            <span id="pagination-info"></span>
+            <button id="next-page" class="btn" aria-label="Next page"></button>
+          </nav>
+        </section>
+      </section>
+
+      <section id="page-calc" class="page" data-route="#/calc" hidden>
+        <header class="page-header">
+          <h2 id="calc-title"></h2>
+          <p id="calc-subtitle" class="page-subtitle"></p>
+        </header>
+        <div class="calc-layout">
+          <form id="calc-form" class="calc-form" novalidate>
+            <fieldset class="calc-group">
+              <legend id="calc-config-title"></legend>
+              <label>
+                <span id="calc-period-label"></span>
+                <select id="calc-period">
+                  <option value="day" id="calc-period-day"></option>
+                  <option value="month" id="calc-period-month"></option>
+                </select>
+              </label>
+              <label>
+                <span id="calc-calls-label"></span>
+                <input type="number" id="calc-calls" min="0" step="1" />
+              </label>
+              <section class="token-method" aria-labelledby="calc-mode-label">
+                <div class="token-method-options" role="radiogroup" aria-labelledby="calc-mode-label">
+                  <span id="calc-mode-label" class="token-method-label"></span>
+                  <div class="token-method-radios">
+                    <label class="token-radio">
+                      <input type="radio" name="calc-mode" id="calc-mode-manual" value="manual" checked />
+                      <span id="calc-mode-manual-label"></span>
+                    </label>
+                    <label class="token-radio">
+                      <input type="radio" name="calc-mode" id="calc-mode-text" value="text" />
+                      <span id="calc-mode-text-label"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="calc-inputs token-text" data-mode="text" hidden aria-hidden="true">
+                  <label>
+                    <span id="calc-text-prompt-label"></span>
+                    <textarea id="calc-text-prompt" rows="4"></textarea>
+                  </label>
+                  <label>
+                    <span id="calc-text-completion-label"></span>
+                    <textarea id="calc-text-completion" rows="4"></textarea>
+                  </label>
+                  <p id="calc-text-hint" class="hint"></p>
+                </div>
+              </section>
+              <label class="calc-lang">
+                <span id="calc-lang-label"></span>
+                <select id="calc-lang">
+                  <option value="zh" id="calc-lang-zh"></option>
+                  <option value="en" id="calc-lang-en"></option>
+                </select>
+              </label>
+              <div class="calc-inputs" data-mode="manual">
+                <label>
+                  <span id="calc-prompt-label"></span>
+                  <input type="number" id="calc-prompt" min="0" step="1" />
+                </label>
+                <label>
+                  <span id="calc-completion-label"></span>
+                  <input type="number" id="calc-completion" min="0" step="1" />
+                </label>
+              </div>
+            </fieldset>
+            <fieldset class="calc-group">
+              <legend id="calc-model-legend"></legend>
+              <label>
+                <span id="calc-model-search-label"></span>
+                <input type="search" id="calc-model-search" />
+              </label>
+              <label class="calc-checkbox">
+                <input type="checkbox" id="calc-model-common" />
+                <span id="calc-model-common-label"></span>
+              </label>
+              <div id="calc-model-options" class="calc-model-list" role="group" aria-multiselectable="true"></div>
+            </fieldset>
+            <fieldset class="calc-group">
+              <legend id="calc-scenario-legend"></legend>
+              <label>
+                <span id="calc-scenario-label"></span>
+                <select id="calc-scenario-select">
+                  <option value="" id="calc-scenario-none"></option>
+                </select>
+              </label>
+              <div class="calc-actions">
+                <button type="button" class="btn secondary" id="calc-save"></button>
+                <button type="button" class="btn secondary" id="calc-rename"></button>
+                <button type="button" class="btn secondary" id="calc-delete"></button>
+              </div>
+            </fieldset>
+            <div class="calc-footer">
+              <div id="calc-errors" class="calc-errors" role="alert" hidden></div>
+              <div class="calc-buttons">
+                <button type="button" class="btn primary" id="calc-compute" disabled></button>
+                <button type="button" class="btn secondary" id="calc-export" disabled></button>
+              </div>
+            </div>
+          </form>
+          <section class="calc-results" aria-live="polite">
+            <header class="calc-results-header">
+              <h3 id="calc-results-title"></h3>
+              <p id="calc-results-note" class="hint"></p>
+            </header>
+            <div id="calc-warning" class="calc-warning" hidden></div>
+            <table class="calc-table">
+              <thead>
+                <tr>
+                  <th id="calc-col-model"></th>
+                  <th id="calc-col-input"></th>
+                  <th id="calc-col-output"></th>
+                  <th id="calc-col-unit"></th>
+                  <th id="calc-col-percall"></th>
+                  <th id="calc-col-period"></th>
+                  <th id="calc-col-month"></th>
+                  <th id="calc-col-diff"></th>
+                </tr>
+              </thead>
+              <tbody id="calc-results-body"></tbody>
+            </table>
+            <div id="calc-results-empty" class="empty-state"></div>
+            <p id="calc-disclaimer" class="hint"></p>
+          </section>
         </div>
       </section>
 
-      <section class="table-section" aria-live="polite">
-        <div class="table-wrapper" role="region" aria-label="Pricing table">
-          <table id="pricing-table">
-            <thead>
-              <tr>
-                <th data-sort="favorite" aria-sort="none">⭐</th>
-                <th data-sort="vendor" aria-sort="none"></th>
-                <th data-sort="model" aria-sort="none"></th>
-                <th data-sort="input" aria-sort="none"></th>
-                <th data-sort="output" aria-sort="none"></th>
-                <th data-sort="currency" aria-sort="none"></th>
-                <th data-sort="unit" aria-sort="none"></th>
-                <th></th>
-                <th data-sort="tempDefault" aria-sort="none"></th>
-                <th data-sort="region" aria-sort="none"></th>
-                <th></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="table-body"></tbody>
-          </table>
-          <div id="empty-state" class="empty-state" hidden></div>
-        </div>
-        <nav class="pagination" aria-label="Pagination">
-          <button id="prev-page" class="btn" aria-label="Previous page"></button>
-          <span id="pagination-info"></span>
-          <button id="next-page" class="btn" aria-label="Next page"></button>
-        </nav>
-      </section>
     </main>
   </div>
 
