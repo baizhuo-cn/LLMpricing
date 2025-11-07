@@ -354,6 +354,7 @@ async function loadCommunityRatings() {
 async function loadJson(path) {
   const isFileProtocol = window.location.protocol === 'file:';
   const url = new URL(path, window.location.href);
+  const cacheKey = url.href;
 
   try {
     const response = await fetch(url.href, { cache: 'no-store' });
