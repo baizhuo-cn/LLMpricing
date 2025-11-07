@@ -233,18 +233,15 @@ a {
   border-radius: 1rem;
   border: 1px solid var(--border);
   overflow-x: auto;
-  width: min(100%, 1200px);
-  min-width: min(100%, 640px);
-  margin: 0 auto;
+  max-width: 100%;
 }
 
 #pricing-table {
-  --column-count: 13;
-  width: min(100%, 1200px);
-  min-width: min(100%, 720px);
+  width: 100%;
+  min-width: 720px;
+  max-width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  margin: 0 auto;
 }
 
 #pricing-table th,
@@ -253,16 +250,8 @@ a {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  width: clamp(120px, 12vw, 200px);
   max-width: 200px;
-}
-
-#pricing-table th,
-#pricing-table tbody td {
-  inline-size: min(200px, calc(100% / var(--column-count)));
-}
-
-#pricing-table tbody td:not(.desc-cell),
-#pricing-table thead th {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -288,38 +277,15 @@ a {
   font-size: 0.75rem;
 }
 
-.desc-cell {
+.desc {
   max-width: 200px;
-}
-
-.desc-cell .desc {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-  max-width: 200px;
-  width: 100%;
-  color: var(--text-muted);
-}
-
-.desc-cell .desc-content {
-  display: -webkit-box;
-  width: 100%;
   white-space: normal;
   line-height: 1.5;
+  color: var(--text-muted);
   word-wrap: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
-  overflow: hidden;
   text-overflow: ellipsis;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-}
-
-.desc-cell .desc.is-expanded .desc-content {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
 }
 
 .desc button {
@@ -603,52 +569,16 @@ a {
   resize: vertical;
 }
 
-.token-method {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-.token-method-options {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.token-method-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.token-method-radios {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.token-radio {
-  display: inline-flex;
-  align-items: center;
+.calc-mode {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
 }
 
-.token-text {
+.calc-radio {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
-}
-
-@media (max-width: 1200px) {
-  .token-method-options {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
 }
 
 .calc-checkbox {
@@ -758,13 +688,196 @@ a {
   background: rgba(37, 99, 235, 0.08);
 }
 
+.ratings-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 1.5rem;
+  padding: 0 1rem 2rem;
+}
+
+.ratings-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 6.5rem;
+  align-self: flex-start;
+}
+
+.ratings-weights,
+.ratings-controls {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.weights-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.weight-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.weight-item .weight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.weight-item input[type="range"] {
+  width: 100%;
+}
+
+.ratings-results {
+  background: var(--bg-alt);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.ratings-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.ratings-table th,
+.ratings-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.ratings-table td.numeric,
+.ratings-table th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-meta {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.ratings-row-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  padding: 0;
+}
+
+.ratings-detail {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.ratings-detail-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.ratings-detail-content label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.ratings-detail-content input[type="range"] {
+  width: 100%;
+}
+
+.ratings-detail-content .rating-value {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dim-bars {
+  display: flex;
+  gap: 0.25rem;
+  align-items: flex-end;
+}
+
+.dim-bar {
+  flex: 1;
+  background: rgba(37, 99, 235, 0.15);
+  border-radius: 0.25rem;
+  position: relative;
+  overflow: hidden;
+  height: 42px;
+}
+
+.dim-bar span {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary);
+  display: block;
+  border-radius: 0.25rem;
+}
+
+.ratings-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.ratings-control input[type="checkbox"] {
+  align-self: flex-start;
+}
+
+.rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.15);
+  color: var(--primary);
+  font-size: 0.75rem;
+}
+
+.rating-badge.warning {
+  background: rgba(251, 191, 36, 0.2);
+  color: #92400e;
+}
+
+.rating-badge.muted {
+  background: rgba(107, 114, 128, 0.2);
+  color: var(--text-muted);
+}
+
+.ratings-status-missing {
+  color: #92400e;
+}
 
 @media (max-width: 1024px) {
-  .calc-layout {
+  .calc-layout,
+  .ratings-layout {
     grid-template-columns: 1fr;
   }
 
-  .calc-form {
+  .calc-form,
+  .ratings-sidebar {
     position: static;
     top: auto;
   }
@@ -780,7 +893,9 @@ a {
     justify-content: center;
   }
 
-  .calc-group {
+  .calc-group,
+  .ratings-weights,
+  .ratings-controls {
     padding: 0.75rem;
   }
 }

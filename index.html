@@ -16,6 +16,7 @@
       <nav class="main-nav" aria-label="Primary navigation">
         <a id="nav-dashboard" href="#/" class="nav-link"></a>
         <a id="nav-calc" href="#/calc" class="nav-link"></a>
+        <a id="nav-ratings" href="#/ratings" class="nav-link"></a>
       </nav>
       <div class="toolbar" role="toolbar" aria-label="Controls">
         <label class="input-group">
@@ -109,32 +110,17 @@
                 <span id="calc-calls-label"></span>
                 <input type="number" id="calc-calls" min="0" step="1" />
               </label>
-              <section class="token-method" aria-labelledby="calc-mode-label">
-                <div class="token-method-options" role="radiogroup" aria-labelledby="calc-mode-label">
-                  <span id="calc-mode-label" class="token-method-label"></span>
-                  <div class="token-method-radios">
-                    <label class="token-radio">
-                      <input type="radio" name="calc-mode" id="calc-mode-manual" value="manual" checked />
-                      <span id="calc-mode-manual-label"></span>
-                    </label>
-                    <label class="token-radio">
-                      <input type="radio" name="calc-mode" id="calc-mode-text" value="text" />
-                      <span id="calc-mode-text-label"></span>
-                    </label>
-                  </div>
-                </div>
-                <div class="calc-inputs token-text" data-mode="text" hidden aria-hidden="true">
-                  <label>
-                    <span id="calc-text-prompt-label"></span>
-                    <textarea id="calc-text-prompt" rows="4"></textarea>
-                  </label>
-                  <label>
-                    <span id="calc-text-completion-label"></span>
-                    <textarea id="calc-text-completion" rows="4"></textarea>
-                  </label>
-                  <p id="calc-text-hint" class="hint"></p>
-                </div>
-              </section>
+              <div class="calc-mode">
+                <span id="calc-mode-label"></span>
+                <label class="calc-radio">
+                  <input type="radio" name="calc-mode" id="calc-mode-manual" value="manual" checked />
+                  <span id="calc-mode-manual-label"></span>
+                </label>
+                <label class="calc-radio">
+                  <input type="radio" name="calc-mode" id="calc-mode-text" value="text" />
+                  <span id="calc-mode-text-label"></span>
+                </label>
+              </div>
               <label class="calc-lang">
                 <span id="calc-lang-label"></span>
                 <select id="calc-lang">
@@ -151,6 +137,17 @@
                   <span id="calc-completion-label"></span>
                   <input type="number" id="calc-completion" min="0" step="1" />
                 </label>
+              </div>
+              <div class="calc-inputs" data-mode="text" hidden>
+                <label>
+                  <span id="calc-text-prompt-label"></span>
+                  <textarea id="calc-text-prompt" rows="4"></textarea>
+                </label>
+                <label>
+                  <span id="calc-text-completion-label"></span>
+                  <textarea id="calc-text-completion" rows="4"></textarea>
+                </label>
+                <p id="calc-text-hint" class="hint"></p>
               </div>
             </fieldset>
             <fieldset class="calc-group">
@@ -210,6 +207,57 @@
             </table>
             <div id="calc-results-empty" class="empty-state"></div>
             <p id="calc-disclaimer" class="hint"></p>
+          </section>
+        </div>
+      </section>
+
+      <section id="page-ratings" class="page" data-route="#/ratings" hidden>
+        <header class="page-header">
+          <h2 id="ratings-title"></h2>
+          <p id="ratings-subtitle" class="page-subtitle"></p>
+        </header>
+        <div class="ratings-layout">
+          <aside class="ratings-sidebar">
+            <section class="ratings-weights">
+              <h3 id="ratings-weights-title"></h3>
+              <div id="ratings-weights-container" class="weights-container"></div>
+              <div class="ratings-weight-actions">
+                <button type="button" class="btn secondary" id="ratings-reset"></button>
+              </div>
+            </section>
+            <section class="ratings-controls">
+              <label class="ratings-control">
+                <span id="ratings-sort-label"></span>
+                <select id="ratings-sort">
+                  <option value="combined" id="ratings-sort-combined"></option>
+                  <option value="cost" id="ratings-sort-cost"></option>
+                  <option value="heat" id="ratings-sort-heat"></option>
+                </select>
+              </label>
+              <label class="ratings-control">
+                <input type="checkbox" id="ratings-common" />
+                <span id="ratings-common-label"></span>
+              </label>
+              <p id="ratings-status" class="hint"></p>
+            </section>
+          </aside>
+          <section class="ratings-results" aria-live="polite">
+            <table class="ratings-table">
+              <thead>
+                <tr>
+                  <th id="ratings-col-model"></th>
+                  <th id="ratings-col-community"></th>
+                  <th id="ratings-col-my"></th>
+                  <th id="ratings-col-heat"></th>
+                  <th id="ratings-col-n"></th>
+                  <th id="ratings-col-updated"></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="ratings-body"></tbody>
+            </table>
+            <div id="ratings-empty" class="empty-state"></div>
+            <p id="ratings-disclaimer" class="hint"></p>
           </section>
         </div>
       </section>

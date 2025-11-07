@@ -5,7 +5,9 @@ const STORAGE_KEYS = {
   favorites: 'fav_models_v1',
   guide: 'guide_dismissed_v1',
   scenarios: 'calc_scenarios_v1',
-  calcLast: 'calc_last_v1'
+  calcLast: 'calc_last_v1',
+  myRatings: 'my_ratings_v1',
+  ratingWeights: 'rating_weights_v1'
 };
 
 const SCENARIO_STORAGE_VERSION = 1;
@@ -22,8 +24,20 @@ const DEFAULT_CALC_SCENARIO = {
   textSamples: { prompt: '', completion: '' }
 };
 
+const RATING_DIMS = ['reasoning', 'coding', 'speed', 'cost_effectiveness', 'safety_compliance', 'availability'];
+const DEFAULT_RATING = 7;
+const BAYES_PRIOR_MEAN = 7;
+const BAYES_PRIOR_STRENGTH = 50;
 const DAYS_PER_MONTH = 30;
-const ROUTES = ['#/', '#/calc'];
+const ROUTES = ['#/', '#/calc', '#/ratings'];
+
+function getDefaultWeights() {
+  const weights = {};
+  RATING_DIMS.forEach(dim => {
+    weights[dim] = 1;
+  });
+  return weights;
+}
 
 function cloneScenario(data = {}) {
   return {
@@ -84,6 +98,16 @@ const state = {
     contextWarnings: [],
     filterCommon: false,
     modelSearch: ''
+  },
+  ratings: {
+    community: { version: 0, last_updated: '', models: [] },
+    communityLoaded: false,
+    communityError: false,
+    weights: {},
+    sort: 'combined',
+    onlyCommon: false,
+    myRatings: {},
+    expanded: new Set()
   }
 };
 
@@ -147,9 +171,11 @@ const elements = {
   toastContainer: $('#toast'),
   navDashboard: $('#nav-dashboard'),
   navCalc: $('#nav-calc'),
+  navRatings: $('#nav-ratings'),
   pages: document.querySelectorAll('.page'),
   pageDashboard: $('#page-dashboard'),
   pageCalc: $('#page-calc'),
+  pageRatings: $('#page-ratings'),
   calcForm: $('#calc-form'),
   calcTitle: $('#calc-title'),
   calcSubtitle: $('#calc-subtitle'),
@@ -210,6 +236,28 @@ const elements = {
   calcResultsBody: $('#calc-results-body'),
   calcResultsEmpty: $('#calc-results-empty'),
   calcDisclaimer: $('#calc-disclaimer'),
+  ratingsTitle: $('#ratings-title'),
+  ratingsSubtitle: $('#ratings-subtitle'),
+  ratingsWeightsTitle: $('#ratings-weights-title'),
+  ratingsWeightsContainer: $('#ratings-weights-container'),
+  ratingsReset: $('#ratings-reset'),
+  ratingsSortLabel: $('#ratings-sort-label'),
+  ratingsSort: $('#ratings-sort'),
+  ratingsSortCombined: $('#ratings-sort-combined'),
+  ratingsSortCost: $('#ratings-sort-cost'),
+  ratingsSortHeat: $('#ratings-sort-heat'),
+  ratingsCommon: $('#ratings-common'),
+  ratingsCommonLabel: $('#ratings-common-label'),
+  ratingsStatus: $('#ratings-status'),
+  ratingsColModel: $('#ratings-col-model'),
+  ratingsColCommunity: $('#ratings-col-community'),
+  ratingsColMy: $('#ratings-col-my'),
+  ratingsColHeat: $('#ratings-col-heat'),
+  ratingsColN: $('#ratings-col-n'),
+  ratingsColUpdated: $('#ratings-col-updated'),
+  ratingsBody: $('#ratings-body'),
+  ratingsEmpty: $('#ratings-empty'),
+  ratingsDisclaimer: $('#ratings-disclaimer')
 };
 
 const columnMap = {
@@ -244,15 +292,19 @@ async function init() {
     loadPrefs();
     loadFavorites();
     loadCalcStorage();
+    loadRatingsStorage();
     setupUI();
     setupCalcUI();
+    setupRatingsUI();
     setupRouting();
     applyPrefsToUI();
     renderVendors();
     applyFilters();
+    await loadCommunityRatings();
     renderCalcModelOptions();
     renderCalcScenarioOptions();
     renderCalcResults();
+    renderRatingsPage();
     maybeShowGuide();
   } catch (err) {
     console.error('Initialization failed', err);
@@ -273,6 +325,26 @@ async function loadData() {
   const data = await loadJson('data/official_pricing.json');
   state.officialData = data;
   state.data = data;
+}
+
+async function loadCommunityRatings() {
+  state.ratings.communityLoaded = false;
+  state.ratings.communityError = false;
+  try {
+    const data = await loadJson('data/ratings.json');
+    if (data && typeof data === 'object' && Array.isArray(data.models)) {
+      state.ratings.community = data;
+    } else {
+      state.ratings.community = { version: 0, last_updated: '', models: [] };
+    }
+  } catch (err) {
+    console.warn('Community ratings unavailable', err);
+    state.ratings.communityError = true;
+    state.ratings.community = { version: 0, last_updated: '', models: [] };
+  } finally {
+    state.ratings.communityLoaded = true;
+    renderRatingsPage();
+  }
 }
 
 async function loadJson(path) {
@@ -369,6 +441,34 @@ function loadCalcStorage() {
     calcState.textSamples = { prompt: '', completion: '' };
     calcState.selectedModels = new Set();
   }
+}
+
+function loadRatingsStorage() {
+  const ratingsState = state.ratings;
+  try {
+    const rawRatings = JSON.parse(localStorage.getItem(STORAGE_KEYS.myRatings) || 'null');
+    if (rawRatings && typeof rawRatings === 'object') {
+      ratingsState.myRatings = rawRatings;
+    } else {
+      ratingsState.myRatings = {};
+    }
+  } catch (err) {
+    ratingsState.myRatings = {};
+  }
+
+  try {
+    const rawWeights = JSON.parse(localStorage.getItem(STORAGE_KEYS.ratingWeights) || 'null');
+    if (rawWeights && typeof rawWeights === 'object') {
+      ratingsState.weights = { ...getDefaultWeights(), ...rawWeights };
+    } else {
+      ratingsState.weights = getDefaultWeights();
+    }
+  } catch (err) {
+    ratingsState.weights = getDefaultWeights();
+  }
+  ratingsState.sort = 'combined';
+  ratingsState.onlyCommon = false;
+  ratingsState.expanded = new Set();
 }
 
 function setupUI() {
@@ -469,11 +569,9 @@ function setupCalcUI() {
     calcState.currentScenario.mode = mode;
     if (elements.calcInputsManual) {
       elements.calcInputsManual.hidden = mode !== 'manual';
-      elements.calcInputsManual.setAttribute('aria-hidden', mode !== 'manual' ? 'true' : 'false');
     }
     if (elements.calcInputsText) {
-      elements.calcInputsText.hidden = !shouldShowTokenEstimate(mode);
-      elements.calcInputsText.setAttribute('aria-hidden', shouldShowTokenEstimate(mode) ? 'false' : 'true');
+      elements.calcInputsText.hidden = mode !== 'text';
     }
     validateCalcForm();
     saveCalcLast();
@@ -570,6 +668,102 @@ function setupCalcUI() {
   validateCalcForm();
 }
 
+function setupRatingsUI() {
+  if (!elements.ratingsWeightsContainer) return;
+  buildRatingsWeightControls();
+  elements.ratingsReset?.addEventListener('click', handleRatingsReset);
+  elements.ratingsSort?.addEventListener('change', handleRatingsSortChange);
+  elements.ratingsCommon?.addEventListener('change', () => {
+    state.ratings.onlyCommon = !!elements.ratingsCommon.checked;
+    renderRatingsPage();
+  });
+  if (elements.ratingsSort) {
+    elements.ratingsSort.value = state.ratings.sort;
+  }
+  if (elements.ratingsCommon) {
+    elements.ratingsCommon.checked = !!state.ratings.onlyCommon;
+  }
+  renderRatingsWeights();
+}
+
+function buildRatingsWeightControls() {
+  const container = elements.ratingsWeightsContainer;
+  if (!container) return;
+  container.innerHTML = '';
+  RATING_DIMS.forEach(dim => {
+    const item = document.createElement('div');
+    item.className = 'weight-item';
+    item.dataset.dim = dim;
+    const header = document.createElement('div');
+    header.className = 'weight-header';
+    const label = document.createElement('span');
+    label.className = 'weight-label';
+    const value = document.createElement('span');
+    value.className = 'weight-value';
+    header.appendChild(label);
+    header.appendChild(value);
+    item.appendChild(header);
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '3';
+    slider.step = '0.1';
+    slider.value = state.ratings.weights[dim] ?? 1;
+    slider.dataset.dim = dim;
+    slider.addEventListener('input', () => {
+      const weight = Number(slider.value);
+      state.ratings.weights[dim] = weight;
+      saveRatingWeights();
+      renderRatingsWeights();
+      renderRatingsPage();
+    });
+    item.appendChild(slider);
+    container.appendChild(item);
+  });
+}
+
+function renderRatingsWeights() {
+  const container = elements.ratingsWeightsContainer;
+  if (!container) return;
+  const dict = state.i18n[state.lang] || state.i18n.zh;
+  container.querySelectorAll('.weight-item').forEach(item => {
+    const dim = item.dataset.dim;
+    const weight = Number(state.ratings.weights[dim] ?? 1);
+    const label = item.querySelector('.weight-label');
+    const value = item.querySelector('.weight-value');
+    const slider = item.querySelector('input[type="range"]');
+    if (label) {
+      label.textContent = dict[`ratings.dim.${dim}`] || dim;
+    }
+    if (value) {
+      value.textContent = weight.toFixed(1);
+    }
+    if (slider) {
+      slider.value = weight;
+    }
+  });
+}
+
+function handleRatingsReset() {
+  state.ratings.weights = getDefaultWeights();
+  saveRatingWeights();
+  renderRatingsWeights();
+  renderRatingsPage();
+}
+
+function handleRatingsSortChange() {
+  state.ratings.sort = elements.ratingsSort?.value || 'combined';
+  renderRatingsPage();
+}
+
+function saveRatingWeights() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ratingWeights, JSON.stringify(state.ratings.weights));
+  } catch (err) {
+    console.warn('Failed to save rating weights', err);
+  }
+}
+
 function updateCalcTextHint() {
   if (!elements.calcTextHint) return;
   const dict = state.i18n[state.lang] || state.i18n.zh;
@@ -594,14 +788,10 @@ function syncCalcFormWithState() {
     elements.calcModeText.checked = calcState.mode === 'text';
   }
   if (elements.calcInputsManual) {
-    const showManual = !shouldShowTokenEstimate(calcState.mode);
-    elements.calcInputsManual.hidden = !showManual;
-    elements.calcInputsManual.setAttribute('aria-hidden', showManual ? 'false' : 'true');
+    elements.calcInputsManual.hidden = calcState.mode === 'text';
   }
   if (elements.calcInputsText) {
-    const showText = shouldShowTokenEstimate(calcState.mode);
-    elements.calcInputsText.hidden = !showText;
-    elements.calcInputsText.setAttribute('aria-hidden', showText ? 'false' : 'true');
+    elements.calcInputsText.hidden = calcState.mode !== 'text';
   }
   if (elements.calcPeriod) {
     elements.calcPeriod.value = scenario.period === 'month' ? 'month' : 'day';
@@ -1286,8 +1476,332 @@ function escapeCsv(value) {
   return text;
 }
 
+function renderRatingsPage() {
+  renderRatingsWeights();
+  if (!elements.ratingsBody) return;
+  const dict = state.i18n[state.lang] || state.i18n.zh;
+  const statusEl = elements.ratingsStatus;
+  if (statusEl) {
+    let status;
+    if (!state.ratings.communityLoaded) {
+      status = dict['ratings.status.loading'] || 'Loading…';
+      statusEl.classList.remove('ratings-status-missing');
+    } else if (state.ratings.communityError) {
+      status = dict['ratings.status.missing'] || 'Community data unavailable';
+      statusEl.classList.add('ratings-status-missing');
+    } else if (!state.ratings.community.models.length) {
+      status = dict['ratings.status.empty'] || 'No community ratings yet';
+      statusEl.classList.remove('ratings-status-missing');
+    } else {
+      const template = dict['ratings.status.updated'] || 'Last updated {date}';
+      status = template.replace('{date}', state.ratings.community.last_updated || '—');
+      statusEl.classList.remove('ratings-status-missing');
+    }
+    statusEl.textContent = status;
+  }
+
+  const rows = computeRatingsRows();
+  elements.ratingsBody.innerHTML = '';
+  if (!rows.length) {
+    if (elements.ratingsEmpty) {
+      elements.ratingsEmpty.hidden = false;
+    }
+    return;
+  }
+  if (elements.ratingsEmpty) {
+    elements.ratingsEmpty.hidden = true;
+  }
+
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = row.id;
+
+    const modelTd = document.createElement('td');
+    const nameBlock = document.createElement('div');
+    nameBlock.textContent = `${row.vendor} / ${row.name}`;
+    modelTd.appendChild(nameBlock);
+    const metaRow = document.createElement('div');
+    metaRow.className = 'rating-meta';
+    const idBadge = document.createElement('span');
+    idBadge.className = 'rating-badge muted';
+    idBadge.textContent = row.id;
+    metaRow.appendChild(idBadge);
+    if (row.isCommon) {
+      const badge = document.createElement('span');
+      badge.className = 'rating-badge';
+      badge.textContent = dict['toggle.commons'] || 'Common';
+      metaRow.appendChild(badge);
+    }
+    modelTd.appendChild(metaRow);
+    tr.appendChild(modelTd);
+
+    const communityTd = document.createElement('td');
+    communityTd.className = 'numeric';
+    communityTd.textContent = formatScore(row.communityScore);
+    if (row.sampleSmall) {
+      const warn = document.createElement('span');
+      warn.className = 'rating-badge warning';
+      warn.textContent = dict['ratings.sampleSmall'] || 'Small sample';
+      communityTd.appendChild(document.createTextNode(' '));
+      communityTd.appendChild(warn);
+    } else if (row.n === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'rating-badge muted';
+      badge.textContent = dict['ratings.noSamples'] || 'No samples';
+      communityTd.appendChild(document.createTextNode(' '));
+      communityTd.appendChild(badge);
+    }
+    communityTd.appendChild(createDimBars(row.dims));
+    tr.appendChild(communityTd);
+
+    const myTd = document.createElement('td');
+    myTd.className = 'numeric';
+    myTd.textContent = formatScore(row.myScore);
+    tr.appendChild(myTd);
+
+    const heatTd = document.createElement('td');
+    heatTd.className = 'numeric';
+    heatTd.textContent = row.heat.toFixed(2);
+    tr.appendChild(heatTd);
+
+    const nTd = document.createElement('td');
+    nTd.className = 'numeric';
+    nTd.textContent = row.n;
+    tr.appendChild(nTd);
+
+    const updatedTd = document.createElement('td');
+    updatedTd.textContent = row.lastUpdated || '—';
+    tr.appendChild(updatedTd);
+
+    const actionTd = document.createElement('td');
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'ratings-row-toggle';
+    const expanded = state.ratings.expanded.has(row.id);
+    toggleBtn.textContent = expanded ? (dict['ratings.row.collapse'] || 'Collapse') : (dict['ratings.row.expand'] || 'Details');
+    toggleBtn.addEventListener('click', () => toggleRatingsRow(row.id));
+    actionTd.appendChild(toggleBtn);
+    tr.appendChild(actionTd);
+
+    elements.ratingsBody.appendChild(tr);
+
+    if (expanded) {
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'ratings-detail';
+      const detailTd = document.createElement('td');
+      detailTd.colSpan = 7;
+      const content = document.createElement('div');
+      content.className = 'ratings-detail-content';
+      RATING_DIMS.forEach(dim => {
+        const label = document.createElement('label');
+        const title = document.createElement('span');
+        title.textContent = dict[`ratings.dim.${dim}`] || dim;
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '1';
+        slider.max = '10';
+        slider.step = '0.5';
+        const current = Number(row.myDims?.[dim] ?? DEFAULT_RATING);
+        slider.value = current;
+        const value = document.createElement('span');
+        value.className = 'rating-value';
+        value.textContent = current.toFixed(1);
+        slider.addEventListener('input', () => {
+          value.textContent = Number(slider.value).toFixed(1);
+        });
+        slider.addEventListener('change', () => {
+          handleRatingChange(row.id, dim, Number(slider.value));
+        });
+        label.appendChild(title);
+        label.appendChild(slider);
+        label.appendChild(value);
+        content.appendChild(label);
+      });
+      detailTd.appendChild(content);
+      detailTr.appendChild(detailTd);
+      elements.ratingsBody.appendChild(detailTr);
+    }
+  });
+}
+
+function computeRatingsRows() {
+  const weights = state.ratings.weights;
+  const onlyCommon = state.ratings.onlyCommon;
+  const communityMap = new Map();
+  if (state.ratings.community && Array.isArray(state.ratings.community.models)) {
+    state.ratings.community.models.forEach(model => {
+      if (model && model.model_id) {
+        communityMap.set(model.model_id, model);
+      }
+    });
+  }
+  const ids = new Set([
+    ...communityMap.keys(),
+    ...Object.keys(state.ratings.myRatings || {})
+  ]);
+  const dataset = getCalcModels();
+  const rows = [];
+  ids.forEach(id => {
+    const community = communityMap.get(id) || null;
+    const my = state.ratings.myRatings[id] || null;
+    const meta = resolveModelMeta(id, dataset);
+    if (onlyCommon && !meta.isCommon) return;
+    const communityDims = community && community.dims ? { ...community.dims } : null;
+    const myDims = my && my.dims ? { ...my.dims } : null;
+    const n = community?.n ?? 0;
+    const communityScore = bayesScore(communityDims, n, weights, BAYES_PRIOR_MEAN, BAYES_PRIOR_STRENGTH);
+    const myScore = weightedAverage(myDims, weights);
+    const heat = heatScore(community?.votes_30d || 0, community?.mentions_30d || 0);
+    const sampleSmall = n > 0 && n < 10;
+    rows.push({
+      id,
+      vendor: meta.vendor,
+      name: meta.name,
+      isCommon: meta.isCommon,
+      communityScore,
+      myScore,
+      heat,
+      n,
+      dims: communityDims,
+      myDims,
+      sampleSmall,
+      lastUpdated: state.ratings.community.last_updated || '—'
+    });
+  });
+
+  const sortKey = state.ratings.sort;
+  rows.sort((a, b) => {
+    if (sortKey === 'heat') {
+      if (b.heat === a.heat) {
+        return (b.communityScore || 0) - (a.communityScore || 0);
+      }
+      return b.heat - a.heat;
+    }
+    if (sortKey === 'cost') {
+      const aVal = (a.dims && Number(a.dims.cost_effectiveness)) || 0;
+      const bVal = (b.dims && Number(b.dims.cost_effectiveness)) || 0;
+      if (bVal === aVal) {
+        return (b.communityScore || 0) - (a.communityScore || 0);
+      }
+      return bVal - aVal;
+    }
+    const aScore = a.communityScore ?? -Infinity;
+    const bScore = b.communityScore ?? -Infinity;
+    if (bScore === aScore) {
+      return b.heat - a.heat;
+    }
+    return bScore - aScore;
+  });
+
+  return rows;
+}
+
+function weightedAverage(dims, weights) {
+  if (!dims || !weights) return null;
+  let total = 0;
+  let weightSum = 0;
+  RATING_DIMS.forEach(dim => {
+    const weight = Number(weights[dim] ?? 1);
+    const value = Number(dims[dim]);
+    if (Number.isFinite(value) && weight > 0) {
+      total += value * weight;
+      weightSum += weight;
+    }
+  });
+  if (weightSum === 0) return null;
+  return total / weightSum;
+}
+
+function bayesScore(dims, n, weights, mu0 = BAYES_PRIOR_MEAN, m = BAYES_PRIOR_STRENGTH) {
+  const sampleMean = weightedAverage(dims, weights);
+  const sampleCount = Math.max(0, Number(n) || 0);
+  if (!Number.isFinite(sampleMean)) {
+    return mu0;
+  }
+  const denom = m + sampleCount;
+  if (denom === 0) return mu0;
+  return ((mu0 * m) + (sampleMean * sampleCount)) / denom;
+}
+
+function heatScore(votes30d = 0, mentions30d = 0) {
+  const v = Math.max(0, Number(votes30d) || 0);
+  const m = Math.max(0, Number(mentions30d) || 0);
+  return Math.log10(1 + v) + Math.log10(1 + m);
+}
+
+function resolveModelMeta(id, dataset) {
+  const source = Array.isArray(dataset) ? dataset : getCalcModels();
+  let match = source.find(item => item.id === id);
+  if (!match) {
+    match = source.find(item => getModelIdentifier(item) === id);
+  }
+  if (!match && id.includes('::')) {
+    const [vendor, model] = id.split('::');
+    match = { vendor, model, is_common: false };
+  }
+  if (!match && id.includes(':')) {
+    const parts = id.split(':');
+    const vendor = parts[0];
+    const model = parts.slice(1).join(':');
+    match = { vendor, model, is_common: false };
+  }
+  return {
+    vendor: match?.vendor || '—',
+    name: match?.model || id,
+    isCommon: !!match?.is_common
+  };
+}
+
+function createDimBars(dims) {
+  const container = document.createElement('div');
+  container.className = 'dim-bars';
+  RATING_DIMS.forEach(dim => {
+    const bar = document.createElement('div');
+    bar.className = 'dim-bar';
+    const fill = document.createElement('span');
+    const value = dims && Number(dims[dim]);
+    const pct = Number.isFinite(value) ? Math.max(0, Math.min(10, value)) * 10 : 0;
+    fill.style.height = `${pct}%`;
+    fill.title = Number.isFinite(value) ? value.toFixed(1) : '—';
+    bar.appendChild(fill);
+    container.appendChild(bar);
+  });
+  return container;
+}
+
+function formatScore(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : '—';
+}
+
+function toggleRatingsRow(id) {
+  if (state.ratings.expanded.has(id)) {
+    state.ratings.expanded.delete(id);
+  } else {
+    state.ratings.expanded.add(id);
+  }
+  renderRatingsPage();
+}
+
+function handleRatingChange(modelId, dim, value) {
+  if (!state.ratings.myRatings[modelId]) {
+    state.ratings.myRatings[modelId] = { dims: {}, ts: Date.now() };
+  }
+  state.ratings.myRatings[modelId].dims[dim] = value;
+  state.ratings.myRatings[modelId].ts = Date.now();
+  saveMyRatings();
+  renderRatingsPage();
+}
+
+function saveMyRatings() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.myRatings, JSON.stringify(state.ratings.myRatings));
+  } catch (err) {
+    console.warn('Failed to save ratings', err);
+  }
+}
+
 function setupRouting() {
-  [elements.navDashboard, elements.navCalc].forEach(link => {
+  [elements.navDashboard, elements.navCalc, elements.navRatings].forEach(link => {
     if (!link) return;
     link.addEventListener('click', () => {
       setTimeout(() => {
@@ -1340,19 +1854,21 @@ function applyRoute() {
       elements.navCalc.removeAttribute('aria-current');
     }
   }
-  if (elements.toolbar) {
-    const showToolbar = shouldShowToolbar(state.route);
-    elements.toolbar.hidden = !showToolbar;
-    if (showToolbar) {
-      elements.toolbar.removeAttribute('aria-hidden');
+  if (elements.navRatings) {
+    const active = state.route === '#/ratings';
+    elements.navRatings.classList.toggle('active', active);
+    if (active) {
+      elements.navRatings.setAttribute('aria-current', 'page');
     } else {
-      elements.toolbar.setAttribute('aria-hidden', 'true');
+      elements.navRatings.removeAttribute('aria-current');
     }
   }
 
   if (state.route === '#/calc') {
     syncCalcFormWithState();
     renderCalcResults();
+  } else if (state.route === '#/ratings') {
+    renderRatingsPage();
   }
 }
 
@@ -1407,6 +1923,7 @@ function applyTranslations() {
 
   elements.navDashboard && (elements.navDashboard.textContent = dict['nav.dashboard'] || dict['title']);
   elements.navCalc && (elements.navCalc.textContent = dict['nav.calc'] || 'Calc');
+  elements.navRatings && (elements.navRatings.textContent = dict['nav.ratings'] || 'Ratings');
 
   if (elements.calcTitle) {
     elements.calcTitle.textContent = dict['calc.title'] || '';
@@ -1529,8 +2046,61 @@ function applyTranslations() {
     elements.calcColDiff.textContent = dict['calc.results.diff'] || '';
   }
 
+  if (elements.ratingsTitle) {
+    elements.ratingsTitle.textContent = dict['ratings.title'] || '';
+  }
+  if (elements.ratingsSubtitle) {
+    elements.ratingsSubtitle.textContent = dict['ratings.subtitle'] || '';
+  }
+  if (elements.ratingsWeightsTitle) {
+    elements.ratingsWeightsTitle.textContent = dict['ratings.weights.title'] || '';
+  }
+  if (elements.ratingsReset) {
+    elements.ratingsReset.textContent = dict['ratings.resetWeights'] || '';
+  }
+  if (elements.ratingsSortLabel) {
+    elements.ratingsSortLabel.textContent = dict['ratings.sort.label'] || '';
+  }
+  if (elements.ratingsSortCombined) {
+    elements.ratingsSortCombined.textContent = dict['ratings.sort.combined'] || '';
+  }
+  if (elements.ratingsSortCost) {
+    elements.ratingsSortCost.textContent = dict['ratings.sort.cost'] || '';
+  }
+  if (elements.ratingsSortHeat) {
+    elements.ratingsSortHeat.textContent = dict['ratings.sort.heat'] || '';
+  }
+  if (elements.ratingsCommonLabel) {
+    elements.ratingsCommonLabel.textContent = dict['ratings.commonOnly'] || '';
+  }
+  if (elements.ratingsColModel) {
+    elements.ratingsColModel.textContent = dict['ratings.col.model'] || '';
+  }
+  if (elements.ratingsColCommunity) {
+    elements.ratingsColCommunity.textContent = dict['ratings.col.community'] || '';
+  }
+  if (elements.ratingsColMy) {
+    elements.ratingsColMy.textContent = dict['ratings.col.my'] || '';
+  }
+  if (elements.ratingsColHeat) {
+    elements.ratingsColHeat.textContent = dict['ratings.col.heat'] || '';
+  }
+  if (elements.ratingsColN) {
+    elements.ratingsColN.textContent = dict['ratings.col.n'] || '';
+  }
+  if (elements.ratingsColUpdated) {
+    elements.ratingsColUpdated.textContent = dict['ratings.col.updated'] || '';
+  }
+  if (elements.ratingsEmpty) {
+    elements.ratingsEmpty.textContent = dict['ratings.empty'] || '';
+  }
+  if (elements.ratingsDisclaimer) {
+    elements.ratingsDisclaimer.textContent = dict['ratings.disclaimer'] || '';
+  }
+
   updateCalcTextHint();
   renderCalcResults();
+  renderRatingsPage();
 
   const headers = document.querySelectorAll('#pricing-table thead th');
   const headerKeys = [
