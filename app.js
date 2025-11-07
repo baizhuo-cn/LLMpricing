@@ -1,3 +1,5 @@
+import { shouldShowToolbar, shouldShowTokenEstimate } from './modules/uiLogic.js';
+
 const STORAGE_KEYS = {
   prefs: 'prefs_v1',
   favorites: 'fav_models_v1',
@@ -127,6 +129,7 @@ const elements = {
   importBtn: $('#import-btn'),
   resetBtn: $('#reset-btn'),
   settingsBtn: $('#settings-btn'),
+  toolbar: document.querySelector('.toolbar'),
   guide: $('#guide'),
   guideDismiss: $('#guide-dismiss'),
   guideText: $('#guide-text'),
