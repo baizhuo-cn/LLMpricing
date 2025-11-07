@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LLM Pricing Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="preload" href="data/official_pricing.json" as="fetch" crossorigin="anonymous" />
+  <link rel="preload" as="fetch" type="application/json" href="./data/official_pricing.json" crossorigin>
 </head>
 <body>
   <div id="app" class="app">
@@ -13,12 +13,16 @@
       <div class="branding">
         <h1 id="app-title">LLM Pricing Dashboard</h1>
       </div>
+      <nav class="main-nav" aria-label="Primary navigation">
+        <a id="nav-dashboard" href="#/" class="nav-link"></a>
+        <a id="nav-calc" href="#/calc" class="nav-link"></a>
+      </nav>
       <div class="toolbar" role="toolbar" aria-label="Controls">
-        <label class="input-group">
+        <label class="input-group" data-scope="pricing-only">
           <span class="sr-only">Search</span>
           <input type="search" id="search-input" aria-label="Search" placeholder="" />
         </label>
-        <div class="dropdown" id="vendor-filter">
+        <div class="dropdown" id="vendor-filter" data-scope="pricing-only">
           <button id="vendor-filter-btn" class="btn" aria-haspopup="true" aria-expanded="false"></button>
           <div class="dropdown-panel" role="menu" aria-hidden="true">
             <div class="dropdown-header">
@@ -32,56 +36,234 @@
             <div class="dropdown-body" id="vendor-options" role="group"></div>
           </div>
         </div>
-        <button id="favorites-toggle" class="btn toggle" aria-pressed="false"></button>
-        <button id="common-toggle" class="btn toggle" aria-pressed="false"></button>
+        <button id="favorites-toggle" class="btn toggle" aria-pressed="false" data-scope="pricing-only"></button>
+        <button id="common-toggle" class="btn toggle" aria-pressed="false" data-scope="pricing-only"></button>
         <div class="segmented">
           <button id="currency-toggle" class="btn"></button>
           <button id="unit-toggle" class="btn"></button>
         </div>
         <button id="lang-toggle" class="btn"></button>
-        <button id="import-btn" class="btn secondary"></button>
-        <button id="settings-btn" class="btn secondary" aria-haspopup="dialog"></button>
-        <button id="reset-btn" class="btn secondary"></button>
+        <div class="sort-controls" data-scope="pricing-only">
+          <label>
+            <span id="sort-field-label"></span>
+            <select id="sort-field">
+              <option value="input" id="sort-field-input"></option>
+              <option value="output" id="sort-field-output"></option>
+            </select>
+          </label>
+          <label>
+            <span id="sort-direction-label"></span>
+            <select id="sort-direction">
+              <option value="asc" id="sort-direction-asc"></option>
+              <option value="desc" id="sort-direction-desc"></option>
+            </select>
+          </label>
+        </div>
+        <button id="import-btn" class="btn secondary" data-scope="pricing-only"></button>
+        <button id="settings-btn" class="btn secondary" aria-haspopup="dialog" data-scope="pricing-only"></button>
+        <button id="reset-btn" class="btn secondary" data-scope="pricing-only"></button>
       </div>
     </header>
 
     <main>
-      <section id="guide" class="guide" role="region" aria-live="polite">
-        <div class="guide-content">
-          <p id="guide-text"></p>
-          <button id="guide-dismiss" class="btn primary"></button>
+      <section id="page-dashboard" class="page" data-route="#/">
+        <section id="guide" class="guide" role="region" aria-live="polite">
+          <div class="guide-content">
+            <p id="guide-text"></p>
+            <button id="guide-dismiss" class="btn primary"></button>
+          </div>
+        </section>
+
+        <section id="compare-panel" class="compare-panel" role="region" aria-labelledby="compare-title" data-scope="pricing-only">
+          <header class="compare-header">
+            <h2 id="compare-title"></h2>
+            <p id="compare-hint" class="hint"></p>
+          </header>
+          <div id="compare-placeholder" class="compare-placeholder" role="note"></div>
+          <div id="compare-grid" class="compare-grid" role="list"></div>
+        </section>
+
+        <section class="table-section" aria-live="polite">
+          <div class="table-wrapper" role="region" aria-label="Pricing table">
+            <table id="pricing-table">
+              <thead>
+                <tr>
+                  <th data-sort="favorite" aria-sort="none">⭐</th>
+                  <th class="compare-column"></th>
+                  <th data-sort="vendor" aria-sort="none"></th>
+                  <th data-sort="model" aria-sort="none"></th>
+                  <th data-sort="input" aria-sort="none"></th>
+                  <th data-sort="output" aria-sort="none"></th>
+                  <th data-sort="currency" aria-sort="none"></th>
+                  <th data-sort="unit" aria-sort="none"></th>
+                  <th></th>
+                  <th data-sort="tempDefault" aria-sort="none"></th>
+                  <th data-sort="region" aria-sort="none"></th>
+                  <th></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+            <div id="empty-state" class="empty-state" hidden></div>
+          </div>
+          <nav class="pagination" aria-label="Pagination">
+            <button id="prev-page" class="btn" aria-label="Previous page"></button>
+            <span id="pagination-info"></span>
+            <button id="next-page" class="btn" aria-label="Next page"></button>
+          </nav>
+        </section>
+      </section>
+
+      <section id="page-calc" class="page" data-route="#/calc" hidden>
+        <header class="page-header">
+          <h2 id="calc-title"></h2>
+          <p id="calc-subtitle" class="page-subtitle"></p>
+        </header>
+        <div class="calc-layout">
+          <form id="calc-form" class="calc-form" novalidate>
+            <fieldset class="calc-group">
+              <legend id="calc-config-title"></legend>
+              <label>
+                <span id="calc-period-label"></span>
+                <select id="calc-period">
+                  <option value="day" id="calc-period-day"></option>
+                  <option value="month" id="calc-period-month"></option>
+                </select>
+              </label>
+              <label>
+                <span id="calc-calls-label"></span>
+                <input type="number" id="calc-calls" min="0" step="1" />
+              </label>
+              <section id="calc-token-method" class="token-method" aria-labelledby="calc-mode-label">
+                <div class="token-method-header">
+                  <span id="calc-mode-label" class="token-method-label"></span>
+                  <div class="token-method-radios" role="radiogroup" aria-labelledby="calc-mode-label">
+                    <label class="token-radio">
+                      <input type="radio" name="calc-mode" id="calc-mode-manual" value="manual" checked />
+                      <span id="calc-mode-manual-label"></span>
+                    </label>
+                    <label class="token-radio">
+                      <input type="radio" name="calc-mode" id="calc-mode-text" value="text" />
+                      <span id="calc-mode-text-label"></span>
+                    </label>
+                  </div>
+                </div>
+                <div id="calc-manual-fields" class="token-method-grid" data-mode="manual">
+                  <label class="token-field">
+                    <span id="calc-prompt-label"></span>
+                    <div class="token-input-wrap">
+                      <input type="number" id="calc-prompt" min="0" max="200000" step="1" aria-describedby="calc-prompt-hint" />
+                      <span class="token-unit" id="calc-prompt-hint"></span>
+                    </div>
+                  </label>
+                  <label class="token-field">
+                    <span id="calc-completion-label"></span>
+                    <div class="token-input-wrap">
+                      <input type="number" id="calc-completion" min="0" max="200000" step="1" aria-describedby="calc-completion-hint" />
+                      <span class="token-unit" id="calc-completion-hint"></span>
+                    </div>
+                  </label>
+                </div>
+                <div id="calc-text-fields" class="token-method-grid token-text" data-mode="text" hidden aria-hidden="true">
+                  <label class="token-field token-text-field">
+                    <span id="calc-text-prompt-label"></span>
+                    <textarea id="calc-text-prompt" rows="4" aria-describedby="calc-text-prompt-count"></textarea>
+                    <div class="token-estimate" aria-live="polite">
+                      <span class="token-estimate-label" id="calc-text-prompt-count"></span>
+                    </div>
+                  </label>
+                  <label class="token-field token-text-field">
+                    <span id="calc-text-completion-label"></span>
+                    <textarea id="calc-text-completion" rows="4" aria-describedby="calc-text-completion-count"></textarea>
+                    <div class="token-estimate" aria-live="polite">
+                      <span class="token-estimate-label" id="calc-text-completion-count"></span>
+                    </div>
+                  </label>
+                  <p id="calc-text-hint" class="hint"></p>
+                </div>
+                <div id="calc-token-warning" class="token-warning" role="alert" hidden></div>
+              </section>
+              <label class="calc-lang">
+                <span id="calc-lang-label"></span>
+                <select id="calc-lang">
+                  <option value="zh" id="calc-lang-zh"></option>
+                  <option value="en" id="calc-lang-en"></option>
+                </select>
+              </label>
+            </fieldset>
+            <fieldset class="calc-group">
+              <legend id="calc-model-legend"></legend>
+              <label>
+                <span id="calc-model-search-label"></span>
+                <input type="search" id="calc-model-search" />
+              </label>
+              <label class="calc-checkbox">
+                <input type="checkbox" id="calc-model-common" />
+                <span id="calc-model-common-label"></span>
+              </label>
+              <div id="calc-model-options" class="calc-model-list" role="group" aria-multiselectable="true"></div>
+            </fieldset>
+            <fieldset class="calc-group">
+              <legend id="calc-scenario-legend"></legend>
+              <label>
+                <span id="calc-scenario-label"></span>
+                <select id="calc-scenario-select">
+                  <option value="" id="calc-scenario-none"></option>
+                </select>
+              </label>
+              <div class="calc-actions">
+                <button type="button" class="btn secondary" id="calc-save"></button>
+                <button type="button" class="btn secondary" id="calc-rename"></button>
+                <button type="button" class="btn secondary" id="calc-delete"></button>
+              </div>
+            </fieldset>
+            <div class="calc-footer">
+              <div id="calc-errors" class="calc-errors" role="alert" hidden></div>
+              <div class="calc-buttons">
+                <button type="button" class="btn primary" id="calc-compute" disabled></button>
+                <button type="button" class="btn secondary" id="calc-export" disabled></button>
+              </div>
+            </div>
+          </form>
+          <section class="calc-results" aria-live="polite">
+            <header class="calc-results-header">
+              <h3 id="calc-results-title"></h3>
+              <p id="calc-results-note" class="hint"></p>
+            </header>
+            <div id="calc-warning" class="calc-warning" hidden></div>
+            <table class="calc-table">
+              <thead>
+                <tr>
+                  <th id="calc-col-model"></th>
+                  <th id="calc-col-input"></th>
+                  <th id="calc-col-output"></th>
+                  <th id="calc-col-unit"></th>
+                  <th id="calc-col-percall"></th>
+                  <th id="calc-col-period"></th>
+                  <th id="calc-col-month"></th>
+                  <th id="calc-col-diff"></th>
+                </tr>
+              </thead>
+              <tbody id="calc-results-body"></tbody>
+            </table>
+            <div id="calc-results-empty" class="empty-state"></div>
+            <p id="calc-disclaimer" class="hint"></p>
+          </section>
+          <section class="calc-history" aria-live="polite" aria-labelledby="calc-history-title">
+            <header class="calc-history-header">
+              <h3 id="calc-history-title"></h3>
+              <div class="calc-history-actions">
+                <button type="button" class="btn secondary" id="calc-history-export" disabled></button>
+                <button type="button" class="btn secondary" id="calc-history-clear" disabled></button>
+              </div>
+            </header>
+            <div id="calc-history-empty" class="empty-state"></div>
+            <div id="calc-history-list" class="calc-history-list"></div>
+          </section>
         </div>
       </section>
 
-      <section class="table-section" aria-live="polite">
-        <div class="table-wrapper" role="region" aria-label="Pricing table">
-          <table id="pricing-table">
-            <thead>
-              <tr>
-                <th data-sort="favorite" aria-sort="none">⭐</th>
-                <th data-sort="vendor" aria-sort="none"></th>
-                <th data-sort="model" aria-sort="none"></th>
-                <th data-sort="input" aria-sort="none"></th>
-                <th data-sort="output" aria-sort="none"></th>
-                <th data-sort="currency" aria-sort="none"></th>
-                <th data-sort="unit" aria-sort="none"></th>
-                <th></th>
-                <th data-sort="tempDefault" aria-sort="none"></th>
-                <th data-sort="region" aria-sort="none"></th>
-                <th></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="table-body"></tbody>
-          </table>
-          <div id="empty-state" class="empty-state" hidden></div>
-        </div>
-        <nav class="pagination" aria-label="Pagination">
-          <button id="prev-page" class="btn" aria-label="Previous page"></button>
-          <span id="pagination-info"></span>
-          <button id="next-page" class="btn" aria-label="Next page"></button>
-        </nav>
-      </section>
     </main>
   </div>
 
@@ -104,7 +286,7 @@
         </label>
         <div class="comment-actions">
           <button type="submit" class="btn primary" id="comment-submit"></button>
-          <button type="button" class="btn secondary" id="comment-export"></button>
+          <button type="button" class="btn secondary" id="comment-export" data-scope="pricing-only"></button>
         </div>
       </form>
     </div>
@@ -149,7 +331,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js" type="module"></script>
+  <script defer src="./vendor/xlsx.full.min.js"></script>
+  <script defer type="module" src="./app.js"></script>
 </body>
 </html>
